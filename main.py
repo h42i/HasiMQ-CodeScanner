@@ -8,7 +8,9 @@ import subprocess
 import urllib
 import urllib.request
 import urllib.parse
+import copy
 import mosquitto
+import threading
 
 from datetime import datetime
 from evdev import InputDevice, list_devices, ecodes, events, categorize
@@ -27,6 +29,7 @@ class CodeScanner:
 
     def __init__(self, broker, scan_device):
         self._broker = broker
+        self._client = None
 
         self._code = ''
         self._scan_device = scan_device
@@ -45,12 +48,22 @@ class CodeScanner:
             self._client.on_disconnect = self.on_disconnect
             self._client.on_publish = self.on_publish
 
-            self._client.connect(self._broker, 1883, 60)
+            self._client.connect(self._broker, 1883, 10)
         except:
             print('Could not connect to broker. Trying again in a few seconds.')
 
             time.sleep(self._error_wait_time)
             self._connect_to_broker()
+
+    def _reconnect_to_broker(self):
+        try:
+            print('Reconnecting to broker')
+
+            self._client.connect(self._broker, 1883, 10)
+        except:
+            print('Could not reconnect to broker. Trying again in a few seconds.')
+
+            self._reconnect_to_broker()
 
     def _connect_to_device(self):
         try:
@@ -88,28 +101,26 @@ class CodeScanner:
     def on_disconnect(self, mosq, obj, rc):
         print('Disconnected from the broker. Reconnecting now.')
 
-        self._connect_to_broker()
+        self._reconnect_to_broker()
 
     def on_publish(self, mosq, obj, mid):
         print('Scanned code successfully published.')
 
     def send_code(self, code):
         try:
+            self._client.publish('hasi/code_scanner', 'connection_test_message_because_mosquittos_publish_callback_is_false_positive_when_sending_the_first_message_after_lost_connection_but_actually_it_should_not_lose_the_connection_this_fast_at_all', 0, True)
             self._client.publish('hasi/code_scanner', code, 0, True)
         except:
-            print('Could not publish scanned code. Reconnecting to the broker.')
+            print('Could not publish scanned code. Reconnecting to the broker and publishing again.')
 
-            time.sleep(self._error_wait_time)
-            self._connect_to_broker()
+            self._reconnect_to_broker()
+            self.send_code(code)
 
     def loop(self):
-        try:
-            self._client.loop(10)
-        except:
+        if self._client.loop() != 0:
             print('Fatal error. Trying to reconnect to the scanner.')
 
-            time.sleep(self._error_wait_time)
-            self._connect_to_broker()
+            self._reconnect_to_broker()
 
         try:
             for event in self._scanner.read_loop():
@@ -120,7 +131,9 @@ class CodeScanner:
                         if data.scancode == 28:
                             print('Scanned code: ' + self._code)
 
-                            self.send_code(self._code)
+                            sending_thread = threading.Thread(target=self.send_code, args=[copy.deepcopy(self._code)])
+                            sending_thread.start()
+
                             self._code = ''
                         else:
                             self._code += self._scan_codes[data.scancode]
