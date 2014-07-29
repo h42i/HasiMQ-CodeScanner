@@ -48,7 +48,7 @@ class CodeScanner:
             self._client.on_disconnect = self.on_disconnect
             self._client.on_publish = self.on_publish
 
-            self._client.connect(self._broker, 1883, 10)
+            self._client.connect(self._broker, 1883, 120)
         except:
             print('Could not connect to broker. Trying again in a few seconds.')
 
@@ -59,7 +59,7 @@ class CodeScanner:
         try:
             print('Reconnecting to broker')
 
-            self._client.connect(self._broker, 1883, 10)
+            self._client.connect(self._broker, 1883, 120)
         except:
             print('Could not reconnect to broker. Trying again in a few seconds.')
 
@@ -108,7 +108,7 @@ class CodeScanner:
 
     def send_code(self, code):
         try:
-            self._client.publish('hasi/code_scanner', 'connection_test_message_because_mosquittos_publish_callback_is_false_positive_when_sending_the_first_message_after_lost_connection_but_actually_it_should_not_lose_the_connection_this_fast_at_all', 0, True)
+            self._client.publish('hasi/null', 'connection_test_message_because_mosquittos_publish_callback_is_false_positive_when_sending_the_first_message_after_lost_connection_but_actually_it_should_not_lose_the_connection_this_fast_at_all', 0, True)
             self._client.publish('hasi/code_scanner', code, 0, True)
         except:
             print('Could not publish scanned code. Reconnecting to the broker and publishing again.')
